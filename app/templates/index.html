@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio - Generador de Libros con IA{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-primary text-white animate__animated animate__fadeIn">
+            <div class="card-body text-center py-5">
+                <h1 class="display-4">Generador de Libros con IA</h1>
+                <p class="lead">Crea libros completos en minutos con el poder de la inteligencia artificial</p>
+                <a href="{{ url_for('main.generate') }}"
+                    class="btn btn-light btn-lg mt-3 animate__animated animate__pulse animate__infinite animate__slower">
+                    <i class="fas fa-plus-circle me-2"></i>Generar nuevo libro
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="border-bottom pb-2">Libros generados</h2>
+    </div>
+</div>
+
+<div class="row" id="books-container">
+    {% if books %}
+    {% for book in books %}
+    <div class="col-md-6 col-lg-4 mb-4 animate__animated animate__fadeInUp"
+        style="animation-delay: {{ loop.index * 0.1 }}s">
+        <div class="card h-100 book-card">
+            <div class="card-body">
+                <h5 class="card-title">{{ book.title }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">{{ book.market_niche }}</h6>
+                <p class="card-text">{{ book.purpose|truncate(100) }}</p>
+                <div class="progress mb-3">
+                    <div class="progress-bar" role="progressbar"
+                        style="width: {{ (book.chapters|length / 10) * 100 }}%;"
+                        aria-valuenow="{{ book.chapters|length }}" aria-valuemin="0" aria-valuemax="10">
+                        {{ book.chapters|length }}/10 capítulos
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <a href="{{ url_for('main.view_book', uuid=book.uuid) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-book me-1"></i>Ver libro
+                </a>
+                <small class="text-muted float-end">
+                    Creado: {{ book.created_at.strftime('%d/%m/%Y') }}
+                </small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info animate__animated animate__fadeIn">
+            <i class="fas fa-info-circle me-2"></i>No hay libros generados todavía. ¡Comienza creando uno nuevo!
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // Refrescar la lista de libros cada 30 segundos
+        setInterval(function () {
+            $.ajax({
+                url: "{{ url_for('main.get_books') }}",
+                method: "GET",
+                success: function (response) {
+                    updateBooksList(response);
+                }
+            });
+        }, 30000);
+
+        function updateBooksList(books) {
+            if (books.length === 0) {
+                $("#books-container").html(`
+                <div class="col-12">
+                    <div class="alert alert-info animate__animated animate__fadeIn">
+                        <i class="fas fa-info-circle me-2"></i>No hay libros generados todavía. ¡Comienza creando uno nuevo!
+                    </div>
+                </div>
+            `);
+                return;
+            }
+
+            let html = '';
+            books.forEach(function (book, index) {
+                let progressPercentage = (book.chapters.length / 10) * 100;
+                html += `
+                <div class="col-md-6 col-lg-4 mb-4 animate__animated animate__fadeIn">
+                    <div class="card h-100 book-card">
+                        <div class="card-body">
+                            <h5 class="card-title">${book.title}</h5>
+                            <h6 class="card-subtitle mb-2 text-muted">${book.market_niche}</h6>
+                            <p class="card-text">${book.purpose.substring(0, 100)}${book.purpose.length > 100 ? '...' : ''}</p>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: ${progressPercentage}%;" 
+                                     aria-valuenow="${book.chapters.length}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="10">
+                                     ${book.chapters.length}/10 capítulos
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-white">
+                            <a href="/book/${book.uuid}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-book me-1"></i>Ver libro
+                            </a>
+                            <small class="text-muted float-end">
+                                Creado: ${new Date(book.created_at).toLocaleDateString()}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            });
+
+            $("#books-container").html(html);
+        }
+    });
+</script>
+{% endblock %}

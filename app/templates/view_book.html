@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} - Generador de Libros con IA{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="border-bottom pb-2 animate__animated animate__fadeIn">{{ book.title }}</h1>
+
+        <!-- Indicador de estado -->
+        {% if book.status == 'processing' %}
+        <div class="badge bg-primary">En proceso</div>
+        {% elif book.status == 'completed' %}
+        <div class="badge bg-success">Completado</div>
+        {% elif book.status == 'error' %}
+        <div class="badge bg-danger">Error</div>
+        {% endif %}
+    </div>
+    <div class="col-md-4 text-md-end">
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Volver a la lista
+        </a>
+    </div>
+</div>
+
+{% if book.status == 'error' %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-danger">
+            <h5><i class="fas fa-exclamation-circle me-2"></i>Error en la generación del libro</h5>
+            <p class="mb-0">{{ book.error_message or "Se ha producido un error durante la generación del libro." }}</p>
+            <div class="mt-3">
+                <a href="{{ url_for('main.generate') }}" class="btn btn-warning btn-sm">
+                    <i class="fas fa-sync me-1"></i>Reintentar generación
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card mb-4 animate__animated animate__fadeInUp">
+            <div class="card-header">
+                <h5 class="mb-0">Información del libro</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-3 fw-bold">Nicho de mercado:</div>
+                    <div class="col-sm-9">{{ book.market_niche }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-3 fw-bold">Propósito:</div>
+                    <div class="col-sm-9">{{ book.purpose }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-3 fw-bold">Fecha de creación:</div>
+                    <div class="col-sm-9">{{ book.created_at|format_datetime }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-3 fw-bold">Última actualización:</div>
+                    <div class="col-sm-9">{{ book.last_updated|format_datetime if book.last_updated else '-' }}</div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-sm-3 fw-bold">Tokens consumidos:</div>
+                    <div class="col-sm-9">
+                        {% if book.input_tokens is not none and book.output_tokens is not none %}
+                        {% set total_tokens = book.input_tokens|int + book.output_tokens|int %}
+                        {{ total_tokens|format_number }} (Entrada: {{ book.input_tokens|format_number }}, Salida: {{
+                        book.output_tokens|format_number }})
+                        {% else %}
+                        0 (Entrada: 0, Salida: 0)
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-4 animate__animated animate__fadeInUp" style="animation-delay: 0.2s">
+            <div class="card-header">
+                <h5 class="mb-0">Exportar libro</h5>
+            </div>
+            <div class="card-body">
+                <p>Descarga el libro en diferentes formatos para su uso o publicación.</p>
+
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.export_book_docx', uuid=book.uuid) }}"
+                        class="btn btn-primary {% if book.status != 'completed' or book.chapters|length < 10 %}disabled{% endif %}"
+                        {% if book.status !='completed' or book.chapters|length < 10 %}aria-disabled="true" {% endif %}>
+                        <i class="fas fa-file-word me-2"></i>Exportar para Kindle (DOCX)
+                    </a>
+
+                    {% if book.status != 'completed' %}
+                    <div class="alert alert-warning mt-2">
+                        <i class="fas fa-exclamation-triangle me-2"></i>El libro aún no está completamente generado o
+                        tiene errores. Complete la generación para exportarlo.
+                    </div>
+                    {% elif book.chapters|length < 10 %} <div class="alert alert-warning mt-2">
+                        <i class="fas fa-exclamation-triangle me-2"></i>El libro no tiene los 10 capítulos requeridos
+                        ({{ book.chapters|length }}/10).
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card animate__animated animate__fadeInUp" style="animation-delay: 0.3s">
+            <div class="card-header">
+                <h5 class="mb-0">Tabla de contenidos</h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="chaptersAccordion">
+                    {% for chapter in book.chapters|sort(attribute='chapter_number') %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ chapter.id }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapse{{ chapter.id }}" aria-expanded="false"
+                                aria-controls="collapse{{ chapter.id }}">
+                                <span class="fw-bold">Capítulo {{ chapter.chapter_number }}:</span>
+                                <span class="ms-2">{{ chapter.title }}</span>
+
+                                {% if book.status == 'completed' or book.status == 'error' %}
+                                <button class="btn btn-outline-secondary btn-sm ms-auto regenerate-chapter"
+                                    data-chapter="{{ chapter.chapter_number }}" data-bs-toggle="tooltip"
+                                    title="Regenerar este capítulo">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                                {% endif %}
+                            </button>
+                        </h2>
+                        <div id="collapse{{ chapter.id }}" class="accordion-collapse collapse"
+                            aria-labelledby="heading{{ chapter.id }}" data-bs-parent="#chaptersAccordion">
+                            <div class="accordion-body">
+                                <div class="mb-3">
+                                    <p class="text-muted"><strong>Alcance:</strong> {{ chapter.scope }}</p>
+                                </div>
+                                <div class="chapter-content">
+                                    {{ chapter.content|safe|replace('\n', '<br>')|replace('\n\n', '<br><br>') }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if book.status == 'processing' and book.chapters|length < 10 %} <div
+                    class="text-center p-4 mt-4 border rounded">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <h5>Generando libro...</h5>
+                    <p class="text-muted">{{ book.chapters|length }} de 10 capítulos completados</p>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                            style="width: {{ (book.chapters|length / 10) * 100 }}%;"
+                            aria-valuenow="{{ book.chapters|length }}" aria-valuemin="0" aria-valuemax="10">
+                            {{ (book.chapters|length / 10) * 100 }}%
+                        </div>
+                    </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // Inicializar tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+
+        // Si el libro no está completo, actualizar periódicamente
+        {% if book.status == 'processing' and book.chapters | length < 10 %}
+        function updateProgress() {
+            $.ajax({
+                url: "{{ url_for('main.get_book_progress', uuid=book.uuid) }}",
+                method: "GET",
+                success: function (response) {
+                    // Corregido: eliminar paréntesis y llaves que causan conflicto
+                    var chaptersLength = {{ book.chapters | length
+            }};
+        if (response.completed_chapters > chaptersLength ||
+            response.status !== 'processing') {
+            // Recargar la página si hay nuevos capítulos o cambio de estado
+            location.reload();
+        }
+    }
+        });
+    }
+
+    // Verificar progreso cada 10 segundos
+    setInterval(updateProgress, 10000);
+    {% endif %}
+
+    // Manejo de regeneración de capítulos
+    $(".regenerate-chapter").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation(); // Evitar que se expanda el acordeón
+
+        const chapterNumber = $(this).data("chapter");
+
+        if (confirm(`¿Estás seguro de que deseas regenerar el capítulo ${chapterNumber}? El contenido actual será reemplazado.`)) {
+            $.ajax({
+                url: "{{ url_for('main.regenerate_chapter', uuid=book.uuid) }}/" + chapterNumber,
+                method: "GET",
+                success: function (response) {
+                    showToast(`Regeneración del capítulo ${chapterNumber} iniciada`, "info");
+
+                    // Recargar la página después de un breve retraso
+                    setTimeout(function () {
+                        location.reload();
+                    }, 1500);
+                },
+                error: function (xhr) {
+                    let errorMsg = `Error al regenerar el capítulo ${chapterNumber}`;
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+                    }
+                    showToast(errorMsg, "danger");
+                }
+            });
+        }
+    });
+
+    function showToast(message, type) {
+        const toastId = 'toast-' + Date.now();
+        const html = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : (type === 'info' ? 'info-circle' : 'exclamation-circle')} me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+
+        $("#toast-container").append(html);
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { autohide: true, delay: 5000 });
+        toast.show();
+    }
+});
+</script>
+{% endblock %}

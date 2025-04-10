@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+
+{% block title %}Generar Libro - Generador de Libros con IA{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="border-bottom pb-2 animate__animated animate__fadeIn">Generar nuevo libro</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <!-- Sección de verificación de la API de Claude -->
+        <div class="card mb-4 animate__animated animate__fadeInUp">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Verificación de la API de Claude</h5>
+            </div>
+            <div class="card-body">
+                <p>Antes de generar un libro, recomendamos verificar que la conexión con la API de Claude funcione
+                    correctamente.</p>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <button id="check-api-btn" class="btn btn-outline-primary">
+                        <i class="fas fa-check-circle me-2"></i>Verificar conexión
+                    </button>
+                    <div id="api-status" class="d-none">
+                        <div id="api-success" class="d-none">
+                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>API configurada
+                                correctamente</span>
+                        </div>
+                        <div id="api-error" class="d-none">
+                            <span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Error en la
+                                API</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="api-details" class="mt-3 d-none">
+                    <div class="alert" id="api-message"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card animate__animated animate__fadeInUp">
+            <div class="card-body">
+                <form id="generate-book-form">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Título del libro</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                        <div class="form-text">Escribe un título atractivo y descriptivo para tu libro.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="market_niche" class="form-label">Nicho de mercado</label>
+                        <input type="text" class="form-control" id="market_niche" name="market_niche" required>
+                        <div class="form-text">Define el público objetivo del libro (ej. emprendedores, estudiantes
+                            universitarios, padres primerizos).</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="purpose" class="form-label">Propósito del libro</label>
+                        <textarea class="form-control" id="purpose" name="purpose" rows="4" required></textarea>
+                        <div class="form-text">Describe el objetivo principal del libro y qué problema resolverá para
+                            los lectores.</div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="generate-btn">
+                            <i class="fas fa-cog me-2"></i>Generar libro
+                        </button>
+                    </div>
+                </form>
+
+                <div id="generation-progress" class="mt-4 d-none">
+                    <h4 class="text-center mb-3">Generando tu libro...</h4>
+                    <div class="progress mb-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                            style="width: 0%" id="progress-bar">0%</div>
+                    </div>
+                    <p class="text-center text-muted" id="progress-text">Preparando la estructura del libro...</p>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>Este proceso puede tardar entre 15-30 minutos. No cierres
+                        esta página.
+                    </div>
+
+                    <!-- Estado actual del proceso -->
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">Estado de la generación</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-2">
+                                <div class="col-4"><strong>Estado:</strong></div>
+                                <div class="col-8" id="status-text">Procesando...</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-4"><strong>Última actualización:</strong></div>
+                                <div class="col-8" id="last-update-text">-</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-4"><strong>Capítulos completados:</strong></div>
+                                <div class="col-8"><span id="chapters-completed">0</span>/10</div>
+                            </div>
+                            <div id="error-container" class="d-none">
+                                <hr>
+                                <div class="alert alert-danger">
+                                    <h6><i class="fas fa-exclamation-circle me-2"></i>Se ha producido un error:</h6>
+                                    <p id="error-message" class="mb-0"></p>
+                                </div>
+                                <div class="mt-3">
+                                    <button id="retry-generation" class="btn btn-warning btn-sm">
+                                        <i class="fas fa-sync me-1"></i>Reintentar generación
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="stalled-container" class="d-none">
+                                <hr>
+                                <div class="alert alert-warning">
+                                    <h6><i class="fas fa-exclamation-triangle me-2"></i>La generación parece estar
+                                        estancada</h6>
+                                    <p>No se han detectado cambios en los últimos minutos. Esto puede ocurrir por
+                                        problemas de conexión con la API de Claude.</p>
+                                </div>
+                                <div class="mt-3">
+                                    <button id="retry-stalled-generation" class="btn btn-warning btn-sm">
+                                        <i class="fas fa-sync me-1"></i>Reintentar generación
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver al inicio
+                        </a>
+                        <a id="view-book-link" href="#" class="btn btn-success d-none">
+                            <i class="fas fa-book me-2"></i>Ver libro
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // Código para verificar la API de Claude
+        $("#check-api-btn").on("click", function () {
+            $(this).prop("disabled", true).html('<i class="fas fa-spinner fa-spin me-2"></i>Verificando...');
+
+            $.ajax({
+                url: "/api/check-claude-connection",
+                method: "GET",
+                success: function (response) {
+                    $("#api-status").removeClass("d-none");
+                    $("#api-success").removeClass("d-none");
+                    $("#api-error").addClass("d-none");
+                    $("#api-details").removeClass("d-none");
+                    $("#api-message").removeClass("alert-danger").addClass("alert-success")
+                        .html(`<strong>Conexión exitosa:</strong> ${response.message}<br>
+                           <strong>Modelo:</strong> ${response.model}<br>
+                           <strong>Respuesta de prueba:</strong> ${response.response}`);
+
+                    showToast("Conexión con la API verificada correctamente", "success");
+                },
+                error: function (xhr) {
+                    $("#api-status").removeClass("d-none");
+                    $("#api-success").addClass("d-none");
+                    $("#api-error").removeClass("d-none");
+                    $("#api-details").removeClass("d-none");
+
+                    let errorMsg = "Error al verificar la API de Claude.";
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+
+                    $("#api-message").removeClass("alert-success").addClass("alert-danger")
+                        .html(`<strong>Error:</strong> ${errorMsg}<br>
+                           <p class="mt-2 mb-0">Verifica que:</p>
+                           <ul class="mb-0">
+                               <li>Has actualizado tu archivo .env con una clave API válida</li>
+                               <li>El modelo seleccionado está disponible en tu cuenta</li>
+                               <li>Tu cuenta de Anthropic tiene saldo suficiente</li>
+                           </ul>`);
+
+                    showToast("Error al verificar la API", "danger");
+                },
+                complete: function () {
+                    $("#check-api-btn").prop("disabled", false).html('<i class="fas fa-check-circle me-2"></i>Verificar conexión');
+                }
+            });
+        });
+
+        // Código para la generación del libro
+        let currentBookUUID = null;
+        let progressInterval = null;
+        let checkFrequency = 5000; // 5 segundos inicialmente
+        let consecutiveErrors = 0;
+
+        $("#generate-book-form").on("submit", function (e) {
+            e.preventDefault();
+
+            // Mostrar progreso y ocultar formulario
+            $("#generate-btn").prop("disabled", true);
+            $("#generation-progress").removeClass("d-none").addClass("animate__animated animate__fadeIn");
+
+            // Reiniciar contadores de error
+            consecutiveErrors = 0;
+
+            // Enviar solicitud de generación
+            $.ajax({
+                url: "{{ url_for('main.generate') }}",
+                method: "POST",
+                data: $(this).serialize(),
+                success: function (response) {
+                    if (response.status === "processing") {
+                        // Iniciar seguimiento del progreso
+                        currentBookUUID = response.book_uuid;
+                        startProgressTracking();
+
+                        // Mostrar mensaje
+                        showToast("Generación de libro iniciada correctamente", "success");
+                    } else if (response.status === "duplicate") {
+                        currentBookUUID = response.book_uuid;
+                        startProgressTracking();
+                        showToast("Ya existe un libro con este título", "warning");
+                    }
+                },
+                error: function (xhr) {
+                    let errorMsg = "Error al iniciar la generación del libro.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+
+                        if (xhr.responseJSON.book_uuid) {
+                            currentBookUUID = xhr.responseJSON.book_uuid;
+                            startProgressTracking();
+                        }
+                    }
+
+                    $("#error-message").text(errorMsg);
+                    $("#error-container").removeClass("d-none");
+                    $("#status-text").text("Error").addClass("text-danger");
+                    $("#generate-btn").prop("disabled", false);
+                    showToast("Error en la generación", "danger");
+                }
+            });
+        });
+
+        // Reintentar generación si hay un error
+        $("#retry-generation, #retry-stalled-generation").on("click", function () {
+            if (!currentBookUUID) return;
+
+            $("#error-container, #stalled-container").addClass("d-none");
+            $("#status-text").text("Procesando...").removeClass("text-danger text-warning");
+            $("#progress-text").text("Preparando la estructura del libro...");
+
+            // Limpiar intervalo existente
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+
+            // Reiniciar la generación
+            $.ajax({
+                url: "{{ url_for('main.generate') }}",
+                method: "POST",
+                data: {
+                    title: $("#title").val(),
+                    market_niche: $("#market_niche").val(),
+                    purpose: $("#purpose").val()
+                },
+                success: function (response) {
+                    showToast("Reiniciando generación del libro", "info");
+                    startProgressTracking();
+                    consecutiveErrors = 0;
+                },
+                error: function (xhr) {
+                    let errorMsg = "No se pudo reiniciar la generación.";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+                    }
+
+                    $("#error-message").text(errorMsg);
+                    $("#error-container").removeClass("d-none");
+                    $("#status-text").text("Error").addClass("text-danger");
+                    showToast("Error al reiniciar la generación", "danger");
+                }
+            });
+        });
+
+        function startProgressTracking() {
+            // Verificar el progreso inicialmente
+            checkProgress();
+
+            // Luego verificar el progreso cada X segundos (frecuencia adaptativa)
+            progressInterval = setInterval(checkProgress, checkFrequency);
+        }
+
+        function checkProgress() {
+            $.ajax({
+                url: `/api/book/${currentBookUUID}/progress`,
+                method: "GET",
+                success: function (response) {
+                    consecutiveErrors = 0;
+                    updateProgressUI(response);
+
+                    // Ajustar frecuencia de verificación según el estado
+                    if (response.status === "completed") {
+                        clearInterval(progressInterval);
+                        showToast("¡Tu libro ha sido generado con éxito!", "success");
+                        checkFrequency = 5000; // Restablecer a valores normales para futuras generaciones
+
+                        // Habilitar botón para ver el libro
+                        $("#view-book-link").attr("href", `/book/${response.uuid}`).removeClass("d-none");
+
+                    } else if (response.status === "error") {
+                        clearInterval(progressInterval);
+                        checkFrequency = 5000; // Restablecer a valores normales
+
+                        // Mostrar detalles del error
+                        $("#error-message").text(response.error_message || "Error desconocido en la generación");
+                        $("#error-container").removeClass("d-none");
+                        $("#status-text").text("Error").addClass("text-danger");
+                        showToast("Error en la generación del libro", "danger");
+
+                    } else if (response.status === "stalled") {
+                        // La generación parece estar atascada
+                        $("#stalled-container").removeClass("d-none");
+                        $("#status-text").text("Estancado").addClass("text-warning");
+                        checkFrequency = 15000; // Verificar con menos frecuencia si está atascado
+
+                    } else {
+                        // Ajustar frecuencia basada en la actividad
+                        const hasProgress = response.completed_chapters > 0;
+                        checkFrequency = hasProgress ? 5000 : 10000;
+                    }
+                },
+                error: function () {
+                    consecutiveErrors++;
+                    console.log(`Error al verificar progreso (intento ${consecutiveErrors})`);
+
+                    // Si hay varios errores consecutivos, mostrar advertencia
+                    if (consecutiveErrors >= 3) {
+                        $("#error-message").text("No se puede conectar con el servidor para verificar el progreso.");
+                        $("#error-container").removeClass("d-none");
+                        $("#status-text").text("Error de conexión").addClass("text-danger");
+
+                        // Aumentar el intervalo para no sobrecargar el servidor
+                        checkFrequency = 15000;
+                    }
+                }
+            });
+        }
+
+        function updateProgressUI(response) {
+            const completedChapters = response.completed_chapters;
+            const percentage = response.progress_percentage;
+
+            // Actualizar barra de progreso
+            $("#progress-bar").css("width", percentage + "%").text(percentage.toFixed(0) + "%");
+
+            // Actualizar texto de estado
+            let statusClass = "";
+            let statusText = "";
+
+            switch (response.status) {
+                case "processing":
+                    statusText = "En proceso";
+                    break;
+                case "completed":
+                    statusText = "Completado";
+                    statusClass = "text-success";
+                    break;
+                case "error":
+                    statusText = "Error";
+                    statusClass = "text-danger";
+                    break;
+                case "stalled":
+                    statusText = "Estancado";
+                    statusClass = "text-warning";
+                    break;
+                default:
+                    statusText = response.status;
+            }
+
+            $("#status-text").text(statusText).removeClass("text-danger text-warning text-success").addClass(statusClass);
+
+            // Actualizar contador de capítulos
+            $("#chapters-completed").text(completedChapters);
+
+            // Actualizar última actualización
+            if (response.last_updated) {
+                const lastUpdateDate = new Date(response.last_updated);
+                $("#last-update-text").text(formatAustriaDate(lastUpdateDate));
+            }
+
+            // Actualizar texto de progreso
+            if (completedChapters === 0) {
+                $("#progress-text").text("Preparando la estructura del libro...");
+            } else if (response.status === "completed") {
+                $("#progress-text").text("¡Libro completado con éxito!");
+            } else if (response.status === "error") {
+                $("#progress-text").text("Se ha producido un error en la generación");
+            } else {
+                $("#progress-text").text(`Generando capítulo ${completedChapters + 1} de 10...`);
+            }
+        }
+
+        function formatAustriaDate(date) {
+            // Convertir a zona horaria de Austria (Viena)
+            // Determinar si es horario de verano o invierno en Europa
+            const isEuropeanDST = (function () {
+                const year = date.getFullYear();
+                const month = date.getMonth(); // 0-11
+                const day = date.getDate();
+
+                // Si es claramente fuera de los meses posibles de horario de verano
+                if (month < 2 || month > 9) { // Antes de marzo o después de octubre
+                    return false;
+                }
+
+                // Si es claramente dentro del horario de verano
+                if (month > 2 && month < 9) { // Después de marzo y antes de octubre
+                    return true;
+                }
+
+                // Calcular el último domingo de marzo
+                const lastDayOfMarch = new Date(year, 2, 31);
+                const lastSundayOfMarch = new Date(
+                    year,
+                    2,
+                    31 - ((lastDayOfMarch.getDay() + 6) % 7)
+                );
+
+                // Calcular el último domingo de octubre
+                const lastDayOfOctober = new Date(year, 9, 31);
+                const lastSundayOfOctober = new Date(
+                    year,
+                    9,
+                    31 - ((lastDayOfOctober.getDay() + 6) % 7)
+                );
+
+                // En marzo después del último domingo o en octubre antes del último domingo
+                if (month === 2) {
+                    return day >= lastSundayOfMarch.getDate();
+                }
+
+                if (month === 9) {
+                    return day < lastSundayOfOctober.getDate();
+                }
+
+                return false;
+            })();
+
+            // Offset de Austria (UTC+1 en invierno, UTC+2 en verano)
+            const austriaOffset = isEuropeanDST ? 2 : 1;
+
+            // Crear fecha con la hora de Austria
+            // JavaScript maneja fechas en UTC y ajusta automáticamente a la zona horaria local del navegador
+            // Para obtener la hora en Austria, necesitamos:
+            // 1. Ajustar a UTC (restar el offset local)
+            // 2. Añadir el offset de Austria
+            const localOffset = -date.getTimezoneOffset() / 60; // El offset local en horas 
+            const totalAdjustment = austriaOffset - localOffset; // Ajuste necesario en horas
+
+            const austriaDate = new Date(date.getTime() + (totalAdjustment * 60 * 60 * 1000));
+
+            // Formato para mostrar
+            const day = austriaDate.getDate().toString().padStart(2, '0');
+            const month = (austriaDate.getMonth() + 1).toString().padStart(2, '0');
+            const year = austriaDate.getFullYear();
+            const hours = austriaDate.getHours().toString().padStart(2, '0');
+            const minutes = austriaDate.getMinutes().toString().padStart(2, '0');
+
+            return `${day}/${month}/${year} ${hours}:${minutes} (hora de Viena)`;
+        }
+
+        function showError(message) {
+            $("#generation-progress").append(`
+            <div class="alert alert-danger mt-3 animate__animated animate__fadeIn">
+                <i class="fas fa-exclamation-circle me-2"></i>${message}
+            </div>
+        `);
+        }
+
+        function showToast(message, type) {
+            const toastId = 'toast-' + Date.now();
+            const html = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : (type === 'warning' ? 'exclamation-triangle' : 'exclamation-circle')} me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+
+            $("#toast-container").append(html);
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { autohide: true, delay: 5000 });
+            toast.show();
+        }
+    });
+</script>
+{% endblock %}
