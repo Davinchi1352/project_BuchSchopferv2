@@ -36,8 +36,8 @@ class BookGenerator:
         Por favor, genera una tabla de contenidos con los siguientes requisitos:
         1. Debe tener exactamente 10 capítulos.
         2. Cada capítulo debe tener un título descriptivo y atractivo.
-        3. Para cada capítulo, incluye una breve descripción del alcance que se cubrirá (2-3 frases).
-        4. La estructura debe ser lógica y coherente, con una progresión natural desde el inicio hasta el final.
+        3. Para cada capítulo, incluye una breve descripción del alcance que se cubrirá (entre 120 y 150 palabras).
+        4. La estructura debe ser lógica y coherente, con una progresión natural desde el inicio hasta el final. Evita tantos subtitutlos como sea posible para que sea una lectura fluida.
         5. Evita repeticiones o solapamientos de temas entre capítulos.
         6. Cada capítulo debe complementar los anteriores y preparar el camino para los siguientes.
         
@@ -162,11 +162,11 @@ class BookGenerator:
         {context}
         
         REQUISITOS DEL CAPÍTULO:
-        1. Escribir un capítulo de aproximadamente 4,000 palabras
+        1. Escribir un capítulo de mínimo 3,000 palabras
         2. Estructura:
            - Introducción atractiva
-           - Desarrollo con subtítulos claros
-           - Ejemplos prácticos o casos de estudio relevantes
+           - Evita subtítulos como sea posible para garantizar una lectura fluida y coherente
+           - Ejemplos prácticos, historias, o casos de estudio relevantes
            - Conclusión que resuma puntos clave y genere expectativa
         3. Características:
            - Original y valioso para el lector

@@ -197,61 +197,214 @@
             location.reload();
         }
     }
-        });
-    }
+            });
+        }
 
     // Verificar progreso cada 10 segundos
     setInterval(updateProgress, 10000);
     {% endif %}
 
-    // Manejo de regeneración de capítulos
+    // Función mejorada para mostrar notificaciones toast
+    function showToast(message, type = 'info') {
+        const toastId = 'toast-' + Date.now();
+
+        // Seleccionar el icono apropiado según el tipo de notificación
+        let icon;
+        switch (type) {
+            case 'success':
+                icon = 'check-circle';
+                break;
+            case 'danger':
+            case 'error':
+                type = 'danger'; // Normalizar 'error' a 'danger' para compatibilidad con Bootstrap
+                icon = 'exclamation-circle';
+                break;
+            case 'warning':
+                icon = 'exclamation-triangle';
+                break;
+            case 'info':
+            default:
+                type = 'info'; // Normalizar a 'info' por defecto
+                icon = 'info-circle';
+        }
+
+        // Crear el HTML del toast
+        const html = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-${icon} me-2"></i>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+
+        // Asegurar que el contenedor de toast existe
+        let toastContainer = $("#toast-container");
+        if (toastContainer.length === 0) {
+            $("body").append('<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>');
+            toastContainer = $("#toast-container");
+        }
+
+        // Añadir el toast al contenedor y mostrarlo
+        toastContainer.append(html);
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, {
+            autohide: true,
+            delay: type === 'danger' ? 10000 : 5000 // Los mensajes de error permanecen más tiempo
+        });
+        toast.show();
+
+        // Eliminar el toast del DOM después de que se oculte
+        $(toastElement).on('hidden.bs.toast', function () {
+            $(this).remove();
+        });
+
+        // Para uso en test/debugging: devolver el ID del toast
+        return toastId;
+    }
+
+    // Manejo mejorado de regeneración de capítulos
     $(".regenerate-chapter").on("click", function (e) {
         e.preventDefault();
         e.stopPropagation(); // Evitar que se expanda el acordeón
 
         const chapterNumber = $(this).data("chapter");
+        const $button = $(this);
+        const $statusBadge = $(".badge").first(); // La primera badge es el estado del libro
 
         if (confirm(`¿Estás seguro de que deseas regenerar el capítulo ${chapterNumber}? El contenido actual será reemplazado.`)) {
+            // Desactivar todos los botones de regeneración para evitar múltiples solicitudes
+            $(".regenerate-chapter").prop("disabled", true);
+
+            // Cambiar el ícono del botón para mostrar una animación de carga
+            $button.html('<i class="fas fa-spinner fa-spin"></i>');
+
             $.ajax({
-                url: "{{ url_for('main.regenerate_chapter', uuid=book.uuid) }}/" + chapterNumber,
+                url: `/book/{{ book.uuid }}/regenerate/${chapterNumber}`,
                 method: "GET",
                 success: function (response) {
+                    // Actualizar visualmente el estado del libro a "processing" sin recargar
+                    $statusBadge.removeClass("bg-success bg-danger").addClass("bg-primary").text("En proceso");
+
+                    // Mensaje de éxito
                     showToast(`Regeneración del capítulo ${chapterNumber} iniciada`, "info");
 
-                    // Recargar la página después de un breve retraso
-                    setTimeout(function () {
-                        location.reload();
-                    }, 1500);
+                    // Crear o actualizar un área de progreso
+                    let $progressArea = $("#regeneration-progress");
+                    if ($progressArea.length === 0) {
+                        // Si no existe, crear el área de progreso
+                        $("main .row").first().after(`
+                                <div class="row mb-4" id="regeneration-progress">
+                                    <div class="col-12">
+                                        <div class="alert alert-info">
+                                            <h5><i class="fas fa-sync-alt fa-spin me-2"></i>Regenerando capítulo ${chapterNumber}</h5>
+                                            <p>Este proceso puede tardar unos minutos. La página se actualizará automáticamente cuando termine.</p>
+                                            <div class="progress mt-3">
+                                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                                                    style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+                    } else {
+                        // Si ya existe, actualizar su contenido
+                        $progressArea.html(`
+                                <div class="col-12">
+                                    <div class="alert alert-info">
+                                        <h5><i class="fas fa-sync-alt fa-spin me-2"></i>Regenerando capítulo ${chapterNumber}</h5>
+                                        <p>Este proceso puede tardar unos minutos. La página se actualizará automáticamente cuando termine.</p>
+                                        <div class="progress mt-3">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                                                style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+                    }
+
+                    // Configurar polling para verificar el progreso de la regeneración
+                    let regenerationCheck = setInterval(function () {
+                        $.ajax({
+                            url: `/api/book/{{ book.uuid }}/progress`,
+                            method: "GET",
+                            success: function (progressData) {
+                                // Si el libro ya no está en estado "processing", recargar la página
+                                if (progressData.status !== "processing") {
+                                    clearInterval(regenerationCheck);
+                                    showToast("Regeneración completada. Recargando página...", "success");
+                                    setTimeout(function () {
+                                        location.reload();
+                                    }, 1500);
+                                }
+                            },
+                            error: function () {
+                                // En caso de error, continuar verificando
+                                console.log("Error al verificar el progreso de regeneración");
+                            }
+                        });
+                    }, 5000); // Verificar cada 5 segundos
                 },
                 error: function (xhr) {
+                    // Restaurar el ícono original del botón
+                    $button.html('<i class="fas fa-sync-alt"></i>');
+
+                    // Habilitar los botones de regeneración
+                    $(".regenerate-chapter").prop("disabled", false);
+
                     let errorMsg = `Error al regenerar el capítulo ${chapterNumber}`;
                     if (xhr.responseJSON && xhr.responseJSON.error) {
                         errorMsg = xhr.responseJSON.error;
                     }
+
+                    // Mostrar un mensaje de error más detallado
                     showToast(errorMsg, "danger");
+
+                    // Mostrar un mensaje de error en la página
+                    let $errorArea = $("#regeneration-error");
+                    if ($errorArea.length === 0) {
+                        $("main .row").first().after(`
+                                <div class="row mb-4" id="regeneration-error">
+                                    <div class="col-12">
+                                        <div class="alert alert-danger">
+                                            <h5><i class="fas fa-exclamation-circle me-2"></i>Error al regenerar el capítulo</h5>
+                                            <p>${errorMsg}</p>
+                                            <button class="btn btn-outline-danger btn-sm mt-2" id="dismiss-error">
+                                                <i class="fas fa-times me-1"></i>Cerrar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+
+                        // Añadir controlador para el botón de cerrar
+                        $("#dismiss-error").on("click", function () {
+                            $("#regeneration-error").remove();
+                        });
+                    } else {
+                        $errorArea.html(`
+                                <div class="col-12">
+                                    <div class="alert alert-danger">
+                                        <h5><i class="fas fa-exclamation-circle me-2"></i>Error al regenerar el capítulo</h5>
+                                        <p>${errorMsg}</p>
+                                        <button class="btn btn-outline-danger btn-sm mt-2" id="dismiss-error">
+                                            <i class="fas fa-times me-1"></i>Cerrar
+                                        </button>
+                                    </div>
+                                </div>
+                            `);
+                    }
                 }
             });
         }
     });
 
-    function showToast(message, type) {
-        const toastId = 'toast-' + Date.now();
-        const html = `
-            <div id="${toastId}" class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body">
-                        <i class="fas fa-${type === 'success' ? 'check-circle' : (type === 'info' ? 'info-circle' : 'exclamation-circle')} me-2"></i>${message}
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
-        `;
-
-        $("#toast-container").append(html);
-        const toastElement = document.getElementById(toastId);
-        const toast = new bootstrap.Toast(toastElement, { autohide: true, delay: 5000 });
-        toast.show();
-    }
-});
+    // Agregar manejador para el botón de cerrar error si ya existe en la página
+    $(document).on("click", "#dismiss-error", function () {
+        $("#regeneration-error").remove();
+    });
+    });
 </script>
 {% endblock %}

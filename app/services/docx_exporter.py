@@ -29,7 +29,13 @@ class DocxExporter:
         core_properties.title = self.book.title
         core_properties.subject = self.book.market_niche
         core_properties.category = self.book.market_niche
-        core_properties.comments = self.book.purpose
+        
+        # Limitar el campo purpose a 255 caracteres para evitar errores
+        if self.book.purpose and len(self.book.purpose) > 250:
+            purpose_truncated = self.book.purpose[:250] + "..."
+            core_properties.comments = purpose_truncated
+        else:
+            core_properties.comments = self.book.purpose
         
         # Configurar estilos
         self._setup_styles()
@@ -90,6 +96,27 @@ class DocxExporter:
         normal_paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
         normal_paragraph_format.space_after = Pt(10)
         normal_paragraph_format.first_line_indent = Pt(20)
+        
+        # Crear estilos para la tabla de contenidos
+        # TOC 1 - para entradas principales (capítulos)
+        toc1_style = styles.add_style('TOC 1', WD_STYLE_TYPE.PARAGRAPH)
+        toc1_format = toc1_style.font
+        toc1_format.name = 'Calibri'
+        toc1_format.size = Pt(12)
+        toc1_format.bold = True
+        toc1_paragraph_format = toc1_style.paragraph_format
+        toc1_paragraph_format.space_after = Pt(6)
+        toc1_paragraph_format.left_indent = Inches(0)
+        
+        # TOC 2 - para entradas secundarias (subtítulos)
+        toc2_style = styles.add_style('TOC 2', WD_STYLE_TYPE.PARAGRAPH)
+        toc2_format = toc2_style.font
+        toc2_format.name = 'Calibri'
+        toc2_format.size = Pt(11)
+        toc2_format.italic = True
+        toc2_paragraph_format = toc2_style.paragraph_format
+        toc2_paragraph_format.space_after = Pt(6)
+        toc2_paragraph_format.left_indent = Inches(0.25)
     
     def _add_bookmark(self, paragraph, bookmark_name):
         """Añade un marcador (bookmark) a un párrafo, útil para la navegación en Kindle"""
@@ -182,8 +209,7 @@ class DocxExporter:
             paragraph.style = 'TOC 1'
         else:
             paragraph.style = 'TOC 2'
-            # Añadir sangría para nivel 2
-            paragraph.paragraph_format.left_indent = Inches(0.25)
+            # No es necesario añadir sangría aquí porque ya está definida en el estilo
         
         paragraph.add_run(text)
     
@@ -194,22 +220,28 @@ class DocxExporter:
         Returns:
             BytesIO: Contenido del documento DOCX como objeto BytesIO
         """
-        # Agregar página de título
-        self._add_title_page()
-        
-        # Agregar tabla de contenidos
-        self._add_table_of_contents()
-        
-        # Agregar capítulos
-        for chapter in sorted(self.book.chapters, key=lambda x: x.chapter_number):
-            self._add_chapter(chapter)
-        
-        # Guardar el documento en un buffer BytesIO
-        docx_buffer = io.BytesIO()
-        self.document.save(docx_buffer)
-        docx_buffer.seek(0)
-        
-        return docx_buffer
+        try:
+            # Agregar página de título
+            self._add_title_page()
+            
+            # Agregar tabla de contenidos
+            self._add_table_of_contents()
+            
+            # Agregar capítulos
+            for chapter in sorted(self.book.chapters, key=lambda x: x.chapter_number):
+                self._add_chapter(chapter)
+            
+            # Guardar el documento en un buffer BytesIO
+            docx_buffer = io.BytesIO()
+            self.document.save(docx_buffer)
+            docx_buffer.seek(0)
+            
+            return docx_buffer
+        except Exception as e:
+            # Capturar cualquier excepción para facilitar la depuración
+            import logging
+            logging.error(f"Error al generar DOCX: {str(e)}")
+            raise
     
     def _add_title_page(self):
         """Añade la página de título al documento"""
