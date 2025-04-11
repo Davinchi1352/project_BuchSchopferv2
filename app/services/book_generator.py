@@ -145,7 +145,7 @@ class BookGenerator:
                 {previous_chapters_summary}
                 """
         
-        # Crear un prompt más directo y eficiente
+        # Crear un prompt más directo y eficiente con énfasis en la longitud requerida
         prompt = f"""
         Tarea: Escribir el Capítulo {chapter_data['number']} para un libro.
         
@@ -162,35 +162,40 @@ class BookGenerator:
         {context}
         
         REQUISITOS DEL CAPÍTULO:
-        1. Escribir un capítulo de mínimo 3,000 palabras
-        2. Estructura:
-           - Introducción atractiva
-           - Evita subtítulos como sea posible para garantizar una lectura fluida y coherente
-           - Ejemplos prácticos, historias, o casos de estudio relevantes
-           - Conclusión que resuma puntos clave y genere expectativa
-        3. Características:
-           - Original y valioso para el lector
+        1. IMPORTANTE: Es absolutamente necesario que el capítulo tenga MÍNIMO 3,450 palabras y preferiblemente entre 3,500-4,000 palabras.
+        2. El capítulo debe ser extremadamente detallado, profundo y completo, con ejemplos extensos y bien desarrollados.
+        3. Estructura:
+           - Introducción atractiva y completa (mínimo 150 palabras)
+           - Desarrollo extenso del tema con varios subtemas (mínimo 3,000 palabras). No crear tantos subtitulos para crear una lectura fluida.
+           - Ejemplos prácticos, anécdotas, o casos de estudio detallados
+           - Conclusión sustanciosa que resuma los puntos clave y genere expectativa (mínimo 300 palabras)
+        4. Características:
+           - Profundo y exhaustivo en la cobertura de cada tema
            - Fluido y coherente con el resto del libro
            - Profesional pero accesible
            - Sin repeticiones de contenido previo
+           - Incluye historias y ejemplos detallados para ilustrar los puntos principales
+           - Usa lenguaje rico y diverso
         
         No incluyas marcadores como "Capítulo X" o "Introducción" al principio.
         Comienza directamente con el contenido del capítulo.
+        
+        RECUERDA: El capítulo DEBE tener como mínimo 3,450 palabras. Es el requisito más importante.
         """
         
         # Determinar max_tokens basado en el modelo
         model = self.claude_client.model.lower()
         
-        # Establecer límites de tokens apropiados según el modelo
+        # Establecer límites de tokens apropiados según el modelo, aumentando para obtener respuestas más largas
         if "haiku" in model:
-            max_output_tokens = 4000  # Claude Haiku tiene límite de 4096
+            max_output_tokens = 8000  # Claude Haiku - aumentado para textos más largos
         elif "sonnet" in model:
-            max_output_tokens = 8000  # Claude Sonnet tiene más capacidad
+            max_output_tokens = 12000  # Claude Sonnet - aumentado para textos más largos
         elif "opus" in model:
-            max_output_tokens = 12000  # Claude Opus tiene la mayor capacidad
+            max_output_tokens = 16000  # Claude Opus - aumentado para textos más largos
         else:
-            # Para cualquier otro modelo, usar un valor conservador
-            max_output_tokens = 4000
+            # Para cualquier otro modelo, usar un valor más alto
+            max_output_tokens = 8000
         
         logger.info(f"Usando límite de max_tokens={max_output_tokens} para modelo {model}")
         
@@ -211,8 +216,11 @@ class BookGenerator:
         content = response['text']
         word_count = len(content.split())
         
-        if word_count < 500:  # Un capítulo muy corto probablemente indica un error
+        # Verificar si el contenido es demasiado corto
+        if word_count < 2500:  # Un capítulo muy corto probablemente indica un error
             logger.warning(f"Capítulo {chapter_data['number']} demasiado corto: {word_count} palabras")
+            
+            # Si es muy corto y hay indicaciones de error
             if "error" in content.lower() or "lo siento" in content.lower():
                 logger.error(f"El contenido parece contener un mensaje de error: {content[:200]}...")
                 return {
@@ -221,8 +229,51 @@ class BookGenerator:
                     'output_tokens': response['output_tokens'],
                     'error': "Contenido insuficiente o con errores"
                 }
+            # Si es corto pero no hay error aparente, intentamos regenerarlo solicitando más contenido
+            else:
+                logger.warning(f"Intentando ampliar el capítulo para alcanzar el mínimo de 3,450 palabras")
+                
+                # Prompt para ampliar el contenido
+                expansion_prompt = f"""
+                Has generado el siguiente contenido para el capítulo {chapter_data['number']} del libro "{book.title}":
+                
+                {content}
+                
+                Sin embargo, el contenido es demasiado corto (solo {word_count} palabras). Necesito que amplíes este capítulo para que tenga AL MENOS 3,450 palabras.
+                
+                Por favor, expande SIGNIFICATIVAMENTE cada sección, añadiendo:
+                1. Más ejemplos concretos y detallados
+                2. Anécdotas o casos de estudio relevantes
+                3. Explicaciones más profundas de los conceptos
+                4. Consideraciones adicionales relacionadas con el tema
+                5. Implicaciones prácticas de las ideas presentadas
+                
+                Devuelve el capítulo COMPLETO, incluyendo el contenido original más las expansiones, para que tenga al menos 3,000 palabras en total.
+                """
+                
+                # Intentar ampliar el contenido
+                expansion_response = self.claude_client.generate_text(expansion_prompt, max_tokens=max_output_tokens)
+                
+                if 'error' not in expansion_response:
+                    expanded_content = expansion_response['text']
+                    expanded_word_count = len(expanded_content.split())
+                    
+                    logger.info(f"Capítulo ampliado de {word_count} a {expanded_word_count} palabras")
+                    
+                    # Actualizar el contenido y los tokens
+                    content = expanded_content
+                    response['input_tokens'] += expansion_response['input_tokens']
+                    response['output_tokens'] += expansion_response['output_tokens']
+                    word_count = expanded_word_count
+                else:
+                    logger.error(f"Error al ampliar el capítulo: {expansion_response.get('error')}")
+                    # Continuamos con el contenido original, aunque sea corto
         
-        logger.info(f"Capítulo {chapter_data['number']} generado con éxito: {word_count} palabras")
+        # Verificar si el contenido está por debajo del objetivo de 3,450 palabras pero es utilizable
+        if word_count < 3450 and word_count >= 2800:
+            logger.warning(f"Capítulo {chapter_data['number']} tiene {word_count} palabras, por debajo del objetivo de 3,450 palabras, pero es utilizable")
+        else:
+            logger.info(f"Capítulo {chapter_data['number']} generado con éxito: {word_count} palabras")
         
         return {
             'content': content,
