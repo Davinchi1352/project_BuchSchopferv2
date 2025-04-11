@@ -12,16 +12,18 @@ class ClaudeClient:
     # Diccionario de límites de tokens por modelo
     MODEL_LIMITS = {
         "claude-3-haiku-20240307": 4096,
-        "claude-3-sonnet-20240229": 8192,
-        "claude-3-opus-20240229": 16384,
-        "claude-3.5-sonnet": 12288,
-        "claude-3.5-haiku": 6144,
+        "claude-3-sonnet-20240229": 4096,
+        "claude-3-opus-20240229": 4096,
+        "claude-3.5-sonnet": 4096,
+        "claude-3.5-haiku": 4096,
+        "claude-3.7-sonnet": 20000,
+        "claude-3.7-sonnet-20250219": 20000,
         "claude-instant-1.2": 4096,
         # Valores predeterminados para otros modelos
         "default": 4096
     }
     
-    def __init__(self, api_key, api_url, model, max_retries=3, timeout=180):
+    def __init__(self, api_key, api_url, model, max_retries=3, timeout=300):
         self.api_key = api_key
         self.api_url = api_url
         self.model = model
@@ -76,6 +78,14 @@ class ClaudeClient:
             ]
         }
         
+        # Añadir configuración de pensamiento extendido si es claude-3.7-sonnet
+        if "claude-3.7-sonnet" in self.model.lower() or "claude-3.7-sonnet-20250219" in self.model.lower():
+            payload['thinking'] = {
+                "type": "enabled",
+                "budget_tokens": 30000
+            }
+            logger.info(f"Habilitando pensamiento extendido con 16,000 tokens de presupuesto para {self.model}")
+        
         # Registrar inicio de la llamada
         logger.info(f"Iniciando llamada a la API de Claude ({self.model}) - tamaño del prompt: {len(prompt)} caracteres")
         logger.info(f"Usando max_tokens={max_tokens} (límite del modelo: {model_limit})")
@@ -129,6 +139,23 @@ class ClaudeClient:
                                         new_limit = actual_limit - 100
                                         logger.warning(f"Ajustando max_tokens a {new_limit} basado en mensaje de error")
                                         payload['max_tokens'] = new_limit
+                                        
+                                        # Actualizar también el límite almacenado para este modelo
+                                        self.MODEL_LIMITS[self.model.lower()] = actual_limit
+                                        logger.warning(f"Actualizando límite conocido para {self.model} a {actual_limit}")
+                                        continue
+                                    
+                            # Si el error es sobre thinking budget_tokens, ajustar para el próximo intento
+                            if 'thinking.budget_tokens' in error_detail and 'thinking' in payload and attempt < self.max_retries:
+                                if 'too large' in error_detail:
+                                    # Extraer el límite real si está en el mensaje de error
+                                    import re
+                                    match = re.search(r'max allowable value is (\d+)', error_detail)
+                                    if match:
+                                        actual_limit = int(match.group(1))
+                                        # Usar el valor máximo permitido
+                                        logger.warning(f"Ajustando budget_tokens a {actual_limit} basado en mensaje de error")
+                                        payload['thinking']['budget_tokens'] = actual_limit
                                         continue
                     except:
                         logger.error(f"No se pudo extraer detalle del error. Respuesta: {response.text[:500]}")
@@ -179,12 +206,18 @@ class ClaudeClient:
                 input_tokens = result.get('usage', {}).get('input_tokens', 0)
                 output_tokens = result.get('usage', {}).get('output_tokens', 0)
                 
+                # Extraer información sobre pensamiento extendido si está disponible
+                thinking_tokens = result.get('usage', {}).get('thinking_tokens', 0)
+                if thinking_tokens > 0:
+                    logger.info(f"El pensamiento extendido utilizó {thinking_tokens} tokens adicionales")
+                
                 logger.info(f"Texto generado con éxito. Tokens de entrada: {input_tokens}, Tokens de salida: {output_tokens}")
                 
                 return {
                     'text': generated_text,
                     'input_tokens': input_tokens,
-                    'output_tokens': output_tokens
+                    'output_tokens': output_tokens,
+                    'thinking_tokens': thinking_tokens if thinking_tokens > 0 else 0
                 }
                 
             except Timeout:

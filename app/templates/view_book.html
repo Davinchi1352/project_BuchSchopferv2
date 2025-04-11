@@ -69,6 +69,8 @@
                         {% set total_tokens = book.input_tokens|int + book.output_tokens|int %}
                         {{ total_tokens|format_number }} (Entrada: {{ book.input_tokens|format_number }}, Salida: {{
                         book.output_tokens|format_number }})
+                        {% if book.thinking_tokens %}<br><span class="badge bg-info">+ {{
+                            book.thinking_tokens|format_number }} tokens de pensamiento extendido</span>{% endif %}
                         {% else %}
                         0 (Entrada: 0, Salida: 0)
                         {% endif %}

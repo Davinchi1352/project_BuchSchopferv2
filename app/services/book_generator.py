@@ -63,7 +63,7 @@ class BookGenerator:
         Asegúrate de que la respuesta sea un JSON válido y completo.
         """
         
-        response = self.claude_client.generate_text(prompt, max_tokens=4000)
+        response = self.claude_client.generate_text(prompt, max_tokens=2000)
         
         # Verificar si hay error en la respuesta
         if 'error' in response:
@@ -183,21 +183,14 @@ class BookGenerator:
         RECUERDA: El capítulo DEBE tener como mínimo 3,450 palabras. Es el requisito más importante.
         """
         
-        # Determinar max_tokens basado en el modelo
-        model = self.claude_client.model.lower()
+        # Usar el límite de tokens proporcionado por el cliente
+        # El cliente de Claude ahora maneja automáticamente los límites según el modelo
+        max_output_tokens = self.claude_client.get_token_limit(self.claude_client.model)
         
-        # Establecer límites de tokens apropiados según el modelo, aumentando para obtener respuestas más largas
-        if "haiku" in model:
-            max_output_tokens = 8000  # Claude Haiku - aumentado para textos más largos
-        elif "sonnet" in model:
-            max_output_tokens = 12000  # Claude Sonnet - aumentado para textos más largos
-        elif "opus" in model:
-            max_output_tokens = 16000  # Claude Opus - aumentado para textos más largos
-        else:
-            # Para cualquier otro modelo, usar un valor más alto
-            max_output_tokens = 8000
+        # Reducir ligeramente para evitar errores al límite
+        max_output_tokens -= 100
         
-        logger.info(f"Usando límite de max_tokens={max_output_tokens} para modelo {model}")
+        logger.info(f"Usando límite de max_tokens={max_output_tokens} para modelo {self.claude_client.model}")
         
         # Usar un número apropiado de tokens para el modelo en uso
         response = self.claude_client.generate_text(prompt, max_tokens=max_output_tokens)
@@ -384,6 +377,23 @@ class BookGenerator:
                     
                     # Generar contenido del capítulo
                     chapter_result = self.generate_chapter(book, chapter_data, previous_chapters_summary)
+                    
+                    # Crear capítulo en la base de datos
+                    chapter = Chapter(
+                        book_id=book.id,
+                        chapter_number=chapter_data['number'],
+                        title=chapter_data['title'],
+                        scope=chapter_data['scope'],
+                        content=chapter_result['content'],
+                        input_tokens=chapter_result['input_tokens'],
+                        output_tokens=chapter_result['output_tokens'],
+                        thinking_tokens=chapter_result.get('thinking_tokens', 0)  # Capturar tokens de pensamiento
+                    )                    
+
+                    # Actualizar los tokens en el libro
+                    book.input_tokens += chapter_result['input_tokens']
+                    book.output_tokens += chapter_result['output_tokens']
+                    book.thinking_tokens += chapter_result.get('thinking_tokens', 0)  # Acumular tokens de pensamiento
                     
                     # Verificar si hubo error en la generación del capítulo
                     if 'error' in chapter_result:

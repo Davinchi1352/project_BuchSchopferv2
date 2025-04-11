@@ -430,7 +430,7 @@ def check_claude_connection():
                 diagnostics['model_status'] = 'No disponible'
                 user_message.update({
                     'status': 'error',
-                    'message': f'El modelo "{model}" no existe o no está disponible con tu cuenta. Prueba con "claude-3-haiku-20240307" o "claude-instant-1.2".'
+                    'message': f'El modelo "{model}" no existe o no está disponible con tu cuenta. Prueba con otro modelo.'
                 })
             elif '429' in error_msg or 'rate' in error_msg.lower() or 'limit' in error_msg.lower():
                 diagnostics['suggested_action'] = 'Tu cuenta ha alcanzado el límite de uso. Espera unos minutos o verifica tu plan.'

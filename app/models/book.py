@@ -20,7 +20,7 @@ class Book(db.Model):
     created_at = db.Column(db.DateTime, default=get_utc_now)
     input_tokens = db.Column(db.Integer, default=0)
     output_tokens = db.Column(db.Integer, default=0)
-    # Agregar estado y mensaje de error
+    thinking_tokens = db.Column(db.Integer, default=0)  # Nuevo campo para tokens de pensamiento extendido
     status = db.Column(db.String(20), default='processing')  # 'processing', 'completed', 'error'
     error_message = db.Column(db.Text)
     last_updated = db.Column(db.DateTime, default=get_utc_now, onupdate=get_utc_now)
@@ -42,6 +42,7 @@ class Book(db.Model):
             'error_message': self.error_message,
             'input_tokens': self.input_tokens,
             'output_tokens': self.output_tokens,
+            'thinking_tokens': self.thinking_tokens,  # Incluir tokens de pensamiento en la serialización
             'chapters': [chapter.to_dict() for chapter in sorted(self.chapters, key=lambda x: x.chapter_number)]
         }
 
@@ -56,6 +57,7 @@ class Chapter(db.Model):
     content = db.Column(db.Text, nullable=False)
     input_tokens = db.Column(db.Integer, default=0)
     output_tokens = db.Column(db.Integer, default=0)
+    thinking_tokens = db.Column(db.Integer, default=0)  # Nuevo campo para tokens de pensamiento extendido
     created_at = db.Column(db.DateTime, default=get_utc_now)
     
     def __repr__(self):
@@ -71,5 +73,6 @@ class Chapter(db.Model):
             'content': self.content,
             'input_tokens': self.input_tokens,
             'output_tokens': self.output_tokens,
+            'thinking_tokens': self.thinking_tokens,  # Incluir tokens de pensamiento
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
